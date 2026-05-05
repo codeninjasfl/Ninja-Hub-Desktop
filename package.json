@@ -1,0 +1,21 @@
+{
+  "name": "ninja-hub-desktop",
+  "version": "1.1.0",
+  "description": "For Code Ninjas",
+  "main": "main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "build:linux": "electron-builder --linux"
+  },
+  "author": "Code Ninjas <support@codeninjas.com>",
+  "homepage": "https://www.codeninjas.com",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "electron": "^34.3.0",
+    "electron-builder": "^25.1.8",
+    "wait-on": "^8.0.3"
+  }
+}
