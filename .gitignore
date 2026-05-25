@@ -1,0 +1,8 @@
+node_modules/
+release/
+All_Builds/
+dist-renderer/
+.DS_Store
+*.log
+.next/
+out/
