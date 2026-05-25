@@ -1,0 +1,36 @@
+appId: com.codeninjas.ninjahubdesktop
+productName: Ninja Hub Desktop
+compression: normal
+directories:
+  output: release
+  buildResources: build
+files:
+  - main/**/*
+  - assets/mainlogo.png
+  - package.json
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+  icon: build/icon.png
+  electronLanguages: ["en-US"]
+nsis:
+  oneClick: true
+  perMachine: true
+  allowToChangeInstallationDirectory: false
+linux:
+  target:
+    - target: AppImage
+    - target: deb
+    - target: tar.gz
+  icon: build/icon.png
+  category: Education
+  electronLanguages: ["en-US"]
+
+asar: true
+asarUnpack:
+  - "**/*.node"
