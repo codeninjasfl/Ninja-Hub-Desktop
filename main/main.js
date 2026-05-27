@@ -147,7 +147,7 @@ app.whenReady().then(() => {
   });
 
   // Pre-warm DNS for known domains
-  session.defaultSession.enableNetworkEmulation({ offline: false });
+  session.defaultSession.preconnect({ url: HOME_URL });
 
   // Apply popup handler to ALL future webContents (iframes, child windows)
   app.on('web-contents-created', (_event, contents) => {
