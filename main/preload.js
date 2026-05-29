@@ -171,7 +171,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const homeBtn   = mkBtn('🏠 Home',     '#0db88f', () => ipcRenderer.send('go-home'));
   const logoutBtn = mkBtn('⟳ Log Out',   '#187ABF', () => ipcRenderer.send('clear-cache-home'));
 
-  toolbar.append(backBtn, homeBtn, logoutBtn, closeBtn);
+  toolbar.append(backBtn, homeBtn, logoutBtn);
   shadow.append(trigger, toolbar);
 
   // ─── Context-aware button visibility ──────────────────────────────────────
