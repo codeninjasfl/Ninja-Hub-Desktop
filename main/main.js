@@ -4,6 +4,7 @@ const path = require('path');
 // ─── Globals ────────────────────────────────────────────────────────────────
 let mainWindow = null;
 let isAppQuitting = false;
+let reopenTimer = null;
 const HOME_URL = 'https://ninjahub.codeninjas.com';
 const iconPath = path.join(__dirname, '../assets/mainlogo.png');
 
@@ -130,10 +131,22 @@ function createWindow() {
 
   // ─── Kiosk lockdown: prevent OS-level close ──────────────────────────────
   mainWindow.on('close', (event) => {
-    if (!isAppQuitting) event.preventDefault();
+    if (!isAppQuitting && reopenTimer) {
+      clearTimeout(reopenTimer);
+      reopenTimer = null;
+    }
   });
 
-  mainWindow.on('closed', () => { mainWindow = null; });
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+
+    if (!isAppQuitting) {
+      reopenTimer = setTimeout(() => {
+        reopenTimer = null;
+        if (!mainWindow && !isAppQuitting) createWindow();
+      }, 1000);
+    }
+  });
 
   // ─── Load the app ─────────────────────────────────────────────────────────
   mainWindow.loadURL(HOME_URL);
@@ -147,7 +160,7 @@ app.whenReady().then(() => {
   });
 
   // Pre-warm DNS for known domains
-  session.defaultSession.enableNetworkEmulation({ offline: false });
+  session.defaultSession.preconnect({ url: HOME_URL });
 
   // Apply popup handler to ALL future webContents (iframes, child windows)
   app.on('web-contents-created', (_event, contents) => {
@@ -196,5 +209,9 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  if (!isAppQuitting) {
+    return;
+  }
+
   if (process.platform !== 'darwin') app.quit();
 });
