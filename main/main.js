@@ -129,6 +129,10 @@ function createWindow() {
     console.log(`[LOAD-FAIL] ${url} — ${desc} (${code}, main=${isMain})`);
   });
 
+  // ─── Kiosk lockdown: restore window if OS "show desktop" hides it ───────
+  mainWindow.on('minimize', () => mainWindow.restore());
+  mainWindow.on('hide', () => mainWindow.show());
+
   // ─── Kiosk lockdown: prevent OS-level close ──────────────────────────────
   mainWindow.on('close', (event) => {
     if (!isAppQuitting && reopenTimer) {
