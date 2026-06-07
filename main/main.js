@@ -1,48 +1,51 @@
 const { app, BrowserWindow, Menu, ipcMain, session } = require('electron');
 const path = require('path');
 
-// ─── Globals ────────────────────────────────────────────────────────────────
+
 let mainWindow = null;
 let isAppQuitting = false;
 let reopenTimer = null;
+let latestReleaseInfo = null;
+let onboardingShownThisSession = false;
+let updateShownThisSession = false;
 const HOME_URL = 'https://ninjahub.codeninjas.com';
 const iconPath = path.join(__dirname, '../assets/mainlogo.png');
 
-// ─── Performance: Chromium flags (applied before app is ready) ──────────────
+
 Menu.setApplicationMenu(null);
 
-// GPU & rendering performance
+
 app.commandLine.appendSwitch('enable-gpu-rasterization');
 app.commandLine.appendSwitch('enable-zero-copy');
 app.commandLine.appendSwitch('ignore-gpu-blocklist');
 app.commandLine.appendSwitch('enable-accelerated-video-decode');
 
-// Network performance
+
 app.commandLine.appendSwitch('enable-quic');
 
-// SSO compatibility: prevent cookie partitioning breaking Azure auth
+
 app.commandLine.appendSwitch('disable-features', 'ThirdPartyStoragePartitioning,PartitionedCookies');
 
-// Standard Chrome user-agent so sites don't serve degraded Electron content
+
 app.userAgentFallback = process.platform === 'win32'
   ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
   : 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
 
-// ─── Certificate & Permission handlers (registered ONCE, outside createWindow) ─
+
 app.on('certificate-error', (event, _wc, url, error, _cert, callback) => {
   console.log(`[CERT] Allowing certificate error (required for local robotics hardware/kits): ${url} (${error})`);
   event.preventDefault();
   callback(true);
 });
 
-// ─── Window Open Handler ────────────────────────────────────────────────────
-// Determines whether a link should open in-place or in a popup.
-// SSO auth flows (Microsoft B2C, OAuth) MUST open as popups to avoid 429 loops.
-// Everything else navigates in the current window for speed.
+
+
+
+
 function handleWindowOpen(details) {
   const url = (details.url || '').toLowerCase();
 
-  // SSO / OAuth popups — must open as separate windows
+  
   const isSSOPopup =
     url.includes('login.microsoftonline.com') ||
     url.includes('login.live.com') ||
@@ -72,9 +75,9 @@ function handleWindowOpen(details) {
     };
   }
 
-  // Hijack navigation to load in-place ONLY if we are currently on a Code Ninjas portal page.
-  // This prevents background helper window/iframe opens on third-party editors (like MakeCode)
-  // from triggering infinite main window refresh/reload loops.
+  
+  
+  
   if (mainWindow && !mainWindow.isDestroyed()) {
     const currentUrl = mainWindow.webContents.getURL().toLowerCase();
     const isCurrentPagePortal = currentUrl.includes('codeninjas.com');
@@ -90,14 +93,93 @@ function handleWindowOpen(details) {
   return { action: 'deny' };
 }
 
-// ─── Create Window ──────────────────────────────────────────────────────────
-function createWindow() {
-  if (process.platform === 'darwin') {
-    app.dock.setIcon(iconPath);
-  }
 
+
+function registerKeyboardShortcuts(contents) {
+  contents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown') return;
+
+    const isControl = input.control || input.meta;
+
+    if (isControl) {
+      const key = input.key.toLowerCase();
+
+      
+      if (key === '=' || key === '+') {
+        event.preventDefault();
+        try {
+          const currentZoom = contents.getZoomFactor();
+          const nextZoom = Math.min(currentZoom + 0.1, 3.0);
+          contents.setZoomFactor(nextZoom);
+          console.log(`[ZOOM] Zoom in factor: ${nextZoom}`);
+        } catch (e) {
+          console.error('[ZOOM] Error Zoom In:', e);
+        }
+      }
+
+      
+      if (key === '-') {
+        event.preventDefault();
+        try {
+          const currentZoom = contents.getZoomFactor();
+          const nextZoom = Math.max(currentZoom - 0.1, 0.5);
+          contents.setZoomFactor(nextZoom);
+          console.log(`[ZOOM] Zoom out factor: ${nextZoom}`);
+        } catch (e) {
+          console.error('[ZOOM] Error Zoom Out:', e);
+        }
+      }
+
+      
+      if (key === '0') {
+        event.preventDefault();
+        try {
+          contents.setZoomFactor(1.0);
+          console.log('[ZOOM] Zoom factor reset to 1.0');
+        } catch (e) {
+          console.error('[ZOOM] Error Zoom Reset:', e);
+        }
+      }
+
+      
+      if (key === 'j') {
+        event.preventDefault();
+        console.log('[HOTKEY] Close application shortcut (Ctrl+J) triggered.');
+        isAppQuitting = true;
+        app.exit(0);
+      }
+    }
+  });
+}
+
+
+function shouldShowOnboarding() {
+  if (process.argv.includes('--skip-onboarding') || process.env.SKIP_ONBOARDING === 'true') {
+    return false;
+  }
+  if (onboardingShownThisSession) {
+    return false;
+  }
+  const fs = require('fs');
+  const fsPath = path.join(app.getPath('home'), '.ninja-hub-onboarding.json');
+  if (fs.existsSync(fsPath)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(fsPath, 'utf8'));
+      if (data.completed || data.skipped) {
+        onboardingShownThisSession = true;
+        return false;
+      }
+    } catch (e) {
+      console.error('[ONBOARDING] Error reading onboarding status file:', e);
+    }
+  }
+  return true;
+}
+
+
+function createWindow() {
   mainWindow = new BrowserWindow({
-    show: false,           // Don't show until content is ready
+    show: false,           
     fullscreen: true,
     alwaysOnTop: true,
     kiosk: true,
@@ -109,31 +191,40 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       webSecurity: false,
       allowRunningInsecureContent: true,
-      backgroundThrottling: false,   // Keep timers running when not focused
-      spellcheck: false              // Disable spellcheck for performance
+      backgroundThrottling: false,   
+      spellcheck: false              
     },
   });
 
-  // Show window as soon as the renderer has painted its first frame
+  registerKeyboardShortcuts(mainWindow.webContents);
+
+  
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
   });
 
-  // Popup / link handling
+  
   mainWindow.webContents.setWindowOpenHandler(handleWindowOpen);
 
-  // ─── Debug/Navigation logging ─────────────────────────────────────────────
+  
   mainWindow.webContents.on('will-navigate', (_e, url) => console.log(`[NAV] ${url}`));
   mainWindow.webContents.on('did-navigate', (_e, url, code) => console.log(`[NAV-DONE] ${url} (${code})`));
   mainWindow.webContents.on('did-fail-load', (_e, code, desc, url, isMain) => {
     console.log(`[LOAD-FAIL] ${url} — ${desc} (${code}, main=${isMain})`);
   });
 
-  // ─── Kiosk lockdown: restore window if OS "show desktop" hides it ───────
-  mainWindow.on('minimize', () => mainWindow.restore());
+  
+  mainWindow.on('minimize', () => {
+    setTimeout(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.restore();
+        mainWindow.focus();
+      }
+    }, 150);
+  });
   mainWindow.on('hide', () => mainWindow.show());
 
-  // ─── Kiosk lockdown: prevent OS-level close ──────────────────────────────
+  
   mainWindow.on('close', (event) => {
     if (!isAppQuitting && reopenTimer) {
       clearTimeout(reopenTimer);
@@ -152,35 +243,41 @@ function createWindow() {
     }
   });
 
-  // ─── Load the app ─────────────────────────────────────────────────────────
-  mainWindow.loadURL(HOME_URL);
+  
+  if (shouldShowOnboarding()) {
+    console.log('[ONBOARDING] Onboarding is required. Loading onboarding.html');
+    mainWindow.loadFile(path.join(__dirname, 'onboarding.html'));
+  } else {
+    console.log('[ONBOARDING] Onboarding not required. Loading HOME_URL');
+    mainWindow.loadURL(HOME_URL);
+  }
 }
 
-// ─── App Ready ──────────────────────────────────────────────────────────────
+
 app.whenReady().then(() => {
-  // Permission handler: Allow camera, microphone, etc. (required for robotics / hardware classes)
+  
   session.defaultSession.setPermissionRequestHandler((_wc, _perm, callback) => {
     callback(true);
   });
 
-  // Pre-warm DNS for known domains
+  
   session.defaultSession.preconnect({ url: HOME_URL });
-
-  // Apply popup handler to ALL future webContents (iframes, child windows)
+  
   app.on('web-contents-created', (_event, contents) => {
     contents.setWindowOpenHandler(handleWindowOpen);
+    registerKeyboardShortcuts(contents);
   });
 
-  // ─── IPC Handlers ─────────────────────────────────────────────────────────
+  
   ipcMain.on('close-app', () => {
     isAppQuitting = true;
-    app.quit();
+    app.exit(0);
   });
 
   ipcMain.on('clear-cache-home', async () => {
     await session.defaultSession.clearCache();
     await session.defaultSession.clearStorageData();
-    // Close all popup windows
+    
     BrowserWindow.getAllWindows().forEach(win => {
       if (win !== mainWindow) win.close();
     });
@@ -196,26 +293,322 @@ app.whenReady().then(() => {
     }
   });
 
+  
+  
+  const getParentUrl = (urlString) => {
+    try {
+      const url = new URL(urlString);
+      
+      url.search = '';
+      url.hash = '';
+      const pathParts = url.pathname.split('/').filter(Boolean);
+      if (pathParts.length > 0) {
+        pathParts.pop();
+        url.pathname = '/' + pathParts.join('/');
+        return url.toString();
+      }
+    } catch (e) {
+      console.error('[GO-BACK] Error parsing parent URL:', e);
+    }
+    return null;
+  };
+
+  const isRootUrl = (urlString) => {
+    try {
+      const url = new URL(urlString);
+      return url.pathname === '/' || url.pathname === '';
+    } catch (e) {
+      return true;
+    }
+  };
+
   ipcMain.on('go-back', (event) => {
     const senderWin = BrowserWindow.fromWebContents(event.sender);
-    if (senderWin && senderWin.webContents.canGoBack()) {
-      senderWin.webContents.goBack();
-    } else if (senderWin && senderWin !== mainWindow) {
-      senderWin.close();
+    if (senderWin) {
+      const canGoBack = senderWin.webContents.canGoBack();
+      const url = senderWin.webContents.getURL();
+      console.log(`[GO-BACK] Received request. URL: ${url}, canGoBack: ${canGoBack}, isMainWindow: ${senderWin === mainWindow}`);
+      
+      if (canGoBack) {
+        senderWin.webContents.goBack();
+        console.log(`[GO-BACK] Executed webContents.goBack()`);
+      } else {
+        
+        const parentUrl = getParentUrl(url);
+        const onRoot = isRootUrl(url);
+        
+        if (parentUrl && parentUrl !== url && !onRoot) {
+          console.log(`[GO-BACK] Fallback: navigating to parent URL: ${parentUrl}`);
+          senderWin.webContents.loadURL(parentUrl);
+        } else if (senderWin !== mainWindow) {
+          console.log(`[GO-BACK] Fallback: closing popup window`);
+          senderWin.close();
+        } else {
+          console.log(`[GO-BACK] Fallback: loading HOME_URL in main window`);
+          senderWin.webContents.loadURL(HOME_URL);
+        }
+      }
+    } else {
+      console.log(`[GO-BACK] Received request but sender window not found.`);
     }
+  });
+
+  
+  ipcMain.handle('get-onboarding-status', () => {
+    return { shouldShow: shouldShowOnboarding() };
+  });
+
+  ipcMain.on('onboarding-shown-session', () => {
+    onboardingShownThisSession = true;
+    console.log('[ONBOARDING] Onboarding marked as shown for this session.');
+  });
+
+  ipcMain.on('set-onboarding-status', (event, status) => {
+    const fs = require('fs');
+    const fsPath = path.join(app.getPath('home'), '.ninja-hub-onboarding.json');
+    try {
+      fs.writeFileSync(fsPath, JSON.stringify({
+        completed: status === 'completed',
+        skipped: status === 'skipped',
+        timestamp: Date.now()
+      }), 'utf8');
+      console.log(`[ONBOARDING] Saved status: ${status}`);
+    } catch (e) {
+      console.error('[ONBOARDING] Error saving onboarding status:', e);
+    }
+    onboardingShownThisSession = true;
+
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      const currentUrl = mainWindow.webContents.getURL();
+      if (currentUrl.startsWith('file:') && currentUrl.includes('onboarding.html')) {
+        console.log('[ONBOARDING] Transitioning from local onboarding page to HOME_URL');
+        mainWindow.loadURL(HOME_URL);
+      }
+    }
+  });
+
+  
+  function isNewerVersion(current, latest) {
+    const c = current.replace(/^v/, '').split('.').map(Number);
+    const l = latest.replace(/^v/, '').split('.').map(Number);
+    for (let i = 0; i < 3; i++) {
+      if ((l[i] || 0) > (c[i] || 0)) return true;
+      if ((l[i] || 0) < (c[i] || 0)) return false;
+    }
+    return false;
+  }
+
+  function checkForUpdates() {
+    console.log('[UPDATE] Checking for updates...');
+    const https = require('https');
+    const options = {
+      hostname: 'api.github.com',
+      path: '/repos/codeninjasfl/Ninja-Hub-Desktop/releases/latest',
+      headers: {
+        'User-Agent': 'Ninja-Hub-Desktop-Updater'
+      }
+    };
+
+    https.get(options, (res) => {
+      if (res.statusCode !== 200) {
+        console.error(`[UPDATE] GitHub API returned status code ${res.statusCode}`);
+        return;
+      }
+
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => {
+        try {
+          const release = JSON.parse(data);
+          const latestVersion = release.tag_name;
+          const currentVersion = app.getVersion();
+          
+          console.log(`[UPDATE] Latest version: ${latestVersion}, Current version: ${currentVersion}`);
+          
+          if (isNewerVersion(currentVersion, latestVersion)) {
+            console.log('[UPDATE] A newer version is available!');
+            latestReleaseInfo = release;
+            updateShownThisSession = true;
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('update-available', {
+                latestVersion,
+                currentVersion,
+                releaseNotes: release.body
+              });
+            }
+          } else {
+            console.log('[UPDATE] App is up to date.');
+          }
+        } catch (e) {
+          console.error('[UPDATE] Error parsing GitHub release data:', e);
+        }
+      });
+    }).on('error', (err) => {
+      console.error('[UPDATE] Error checking updates:', err);
+    });
+  }
+
+  function downloadFile(fileUrl, outputPath, onProgress, onSuccess, onError) {
+    const https = require('https');
+    const http = require('http');
+    const protocol = fileUrl.startsWith('https') ? https : http;
+
+    protocol.get(fileUrl, { headers: { 'User-Agent': 'Ninja-Hub-Desktop-Updater' } }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        return downloadFile(res.headers.location, outputPath, onProgress, onSuccess, onError);
+      }
+
+      if (res.statusCode !== 200) {
+        onError(new Error(`Failed to download: Status code ${res.statusCode}`));
+        return;
+      }
+
+      const totalBytes = parseInt(res.headers['content-length'], 10);
+      let downloadedBytes = 0;
+
+      const fs = require('fs');
+      const fileStream = fs.createWriteStream(outputPath);
+      res.pipe(fileStream);
+
+      res.on('data', (chunk) => {
+        downloadedBytes += chunk.length;
+        if (totalBytes) {
+          const percent = Math.round((downloadedBytes / totalBytes) * 100);
+          onProgress(percent);
+        }
+      });
+
+      fileStream.on('finish', () => {
+        fileStream.close();
+        onSuccess();
+      });
+
+      fileStream.on('error', (err) => {
+        fs.unlink(outputPath, () => {});
+        onError(err);
+      });
+    }).on('error', onError);
+  }
+
+  function installUpdate(installerPath) {
+    const { spawn } = require('child_process');
+    const platform = process.platform;
+    console.log(`[UPDATE] Running installer: ${installerPath}`);
+
+    if (platform === 'win32') {
+      const child = spawn(installerPath, [], {
+        detached: true,
+        stdio: 'ignore'
+      });
+      child.unref();
+      isAppQuitting = true;
+      app.exit(0);
+    } else if (platform === 'linux') {
+      const fs = require('fs');
+      try {
+        fs.chmodSync(installerPath, 0o755);
+        const child = spawn(installerPath, [], {
+          detached: true,
+          stdio: 'ignore'
+        });
+        child.unref();
+        isAppQuitting = true;
+        app.exit(0);
+      } catch (err) {
+        console.error('[UPDATE] Failed to run AppImage:', err);
+      }
+    } else {
+      const { shell } = require('electron');
+      shell.openPath(installerPath).then(() => {
+        isAppQuitting = true;
+        app.exit(0);
+      });
+    }
+  }
+
+  
+  ipcMain.on('check-for-update', (event) => {
+    if (updateShownThisSession) {
+      console.log('[UPDATE] Update already shown this session. Skipping check.');
+      return;
+    }
+    if (!latestReleaseInfo) {
+      checkForUpdates();
+    } else {
+      const latestVersion = latestReleaseInfo.tag_name;
+      const currentVersion = app.getVersion();
+      if (isNewerVersion(currentVersion, latestVersion)) {
+        updateShownThisSession = true;
+        event.sender.send('update-available', {
+          latestVersion,
+          currentVersion,
+          releaseNotes: latestReleaseInfo.body
+        });
+      }
+    }
+  });
+
+  ipcMain.on('update-shown-session', () => {
+    updateShownThisSession = true;
+    console.log('[UPDATE] Update marked as shown for this session.');
+  });
+
+  ipcMain.on('start-update-download', (event) => {
+    if (!latestReleaseInfo) {
+      event.sender.send('update-error', 'No update information available.');
+      return;
+    }
+
+    const platform = process.platform;
+    let extension = '';
+    if (platform === 'win32') {
+      extension = '.exe';
+    } else if (platform === 'linux') {
+      extension = '.appimage';
+    }
+
+    const asset = latestReleaseInfo.assets.find(a => a.name.toLowerCase().endsWith(extension));
+    if (!asset) {
+      console.log(`[UPDATE] No asset matching platform ${platform} and extension ${extension}.`);
+      event.sender.send('update-error', `Direct installer not found for ${platform}. Redirecting to download page.`);
+      const { shell } = require('electron');
+      shell.openExternal(latestReleaseInfo.html_url);
+      return;
+    }
+
+    const tempDir = app.getPath('temp');
+    const destPath = path.join(tempDir, asset.name);
+
+    downloadFile(asset.browser_download_url, destPath,
+      (percent) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('update-download-progress', percent);
+        }
+      },
+      () => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('update-download-complete');
+        }
+        setTimeout(() => {
+          installUpdate(destPath);
+        }, 1500);
+      },
+      (err) => {
+        console.error('[UPDATE] Download error:', err);
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('update-error', err.message);
+        }
+      }
+    );
   });
 
   createWindow();
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
 });
 
 app.on('window-all-closed', () => {
   if (!isAppQuitting) {
     return;
   }
-
-  if (process.platform !== 'darwin') app.quit();
+  app.exit(0);
 });
