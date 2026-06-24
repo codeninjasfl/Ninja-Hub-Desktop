@@ -55,23 +55,6 @@ npm start
 npm run build:linux && npm run build:win
 ```
 
-## 🚀 Release v1.2.0 Updates & Features
-
-The v1.2.0 release brings layout refinements, navigation optimizations, and features for Code Ninjas Senseis:
-
-### 🛠️ GameBuilding Session Integration
-- **Contextual Sliding Tab**: A hidden drawer (`🛠️ GameBuilding Session`) is located at the top-right of the window. Hovering your mouse in the top-right corner reveals the tab. Clicking it redirects directly to the GameBuilding session form (`https://forms.codeninjas.com/gamebuilding`).
-- **Conditional Visibility**: The tab is context-aware; it only displays on the main Ninja Hub login screen and is automatically hidden when navigating elsewhere (e.g. the student dashboard).
-
-### ⚡ Performance & Layout Refinements
-- **Isolated Viewport Triggers**: The top hover boundary is split into two regions (`width: calc(100% - 220px)` on the left for the main app navigation drawer, and `width: 220px` on the right for the GameBuilding session drawer). This prevents both drawers from triggering simultaneously and eliminates overlapping hover listeners.
-- **Hardware & External Site Compatibility**: Retained permissive permission handlers, certificate validation bypasses, and standard browser CORS flags. This ensures external educational platforms (e.g., Codio, Scratch Link, and other resources nested within Academies) and local robotics/hardware kits connect and load assets without issues.
-
-### 🐛 Bug Fixes
-- **Editor Auto-Refresh Loop Fixed**: Resolved a bug where background window/iframe requests (e.g., MakeCode Arcade simulators) were hijacked by the main window, causing the editor to auto-refresh every 10 seconds. Hijacking is now strictly restricted to Code Ninjas portal domains.
-
-
-
 ## 📄 License & Attribution
 
 This project was built to interface with Ninja Hub. All associated branding, logos (`mainlogo.png`), and trademarks belong to **Code Ninjas**.
