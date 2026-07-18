@@ -37,6 +37,15 @@ linux:
   category: Education
   electronLanguages: ["en-US"]
 
+mac:
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+  icon: build/icon.png
+  category: public.app-category.education
+
 asar: true
 asarUnpack:
   - "**/*.node"

@@ -24,15 +24,15 @@
 
 ## 📦 Releases & Architecture
 
-This application is built natively for **Windows** and **Linux** utilizing `electron-builder` for minimal payload sizes and broad deployment flexibility.
+This application is built natively for **Windows**, **Linux**, and **macOS** utilizing `electron-builder` for minimal payload sizes, broad deployment flexibility, and absolute kiosk environment lockdown.
 
 Check the GitHub Releases tab for pre-compiled binaries:
-- **Windows**: `.exe` (NSIS Installer) and Portable `.exe`
-- **Linux**: `.AppImage` (Universal executable) and `.tar.gz`.
+- **Windows**: `.exe` (NSIS Installer) and Portable `.exe` (x64)
+- **Linux**: `.AppImage` (Universal executable), `.deb`, and `.tar.gz` (x64)
+- **macOS**: `.dmg` Installer (supporting both Intel `x64` and Apple Silicon `arm64`)
 
-## 🚫 macOS Support Status
-
-macOS is currently **unsupported** due to strict Microsoft Azure Intune and Conditional Access MDM policies that aggressively block Electron-based web wrappers on Apple devices. For macOS usage, it is strictly recommended to use Google Chrome with the Windows 10 Accounts extension, or Safari with the Microsoft Enterprise SSO plug-in.
+### 🔑 Microsoft Azure Intune & Conditional Access Bypass
+On macOS, strict Azure/Intune MDM and Conditional Access policies often block custom Electron web wrappers because of mismatched OS reporting or custom agent signatures. This release implements custom **User-Agent spoofing** that mirrors standard macOS Google Chrome. By aligning browser OS headers with Apple device profiles and completely stripping all "Electron" markers from requests, single sign-on (SSO) login screens pass authentication checks without MDM blockages.
 
 ## 🛠️ Development & Building
 
@@ -51,10 +51,46 @@ npm install
 # Start the application in development mode
 npm start
 
-# Compile for all platforms (Windows and Linux)
-npm run build:linux && npm run build:win
+# Compile for a specific platform
+npm run build:win      # Compile Windows x64 NSIS/Portable
+npm run build:linux    # Compile Linux x64 deb/AppImage/tar.gz
+npm run build:mac      # Compile macOS DMG (Universal x64/arm64)
+
+# Compile for all platforms at once
+npm run build
 ```
 
+## 🚀 Release v2.0.0 & v2.0.1 Updates & Features
+
+The v2.0 releases bring major platform updates, startup flow optimizations, and extended platform compatibility:
+
+### 🚀 Launch Onboarding (v2.0.0)
+- **Startup Onboarding**: Re-routed the first-launch Sensei onboarding tutorial to render immediately on startup using a local offline-safe `onboarding.html` rather than waiting for remote portal login pages to load.
+- **Auto-Redirect**: Once onboarding is skipped or completed, the application writes a persistence status file and automatically transitions the window to the main Ninja Hub login portal.
+- **Kiosk Close Options**: Added a Close App button directly onto the onboarding modal, enabling kiosk exit support on first-launch.
+
+### 🔒 Clean Task Manager Process Exits (v2.0.0)
+- **Force Exit Implementation**: Replaced all instances of `app.quit()` with `app.exit(0)` across key events (like the `Ctrl+J` shortcut, the toolbar's Close App drawer button, onboarding's Close button, and the autoupdater process spawn). This force-kills all active GPU processes, Chromium helper threads, and renderer nodes, preventing lingering zombie processes in Task Manager.
+
+### 🍎 Full macOS MDM Conditional Access Support (v2.0.1)
+- **Intune Bypass**: Added runtime session headers that override default User-Agent strings on macOS, masquerading the browser context as standard macOS Chrome and eliminating "Electron" string flags.
+- **Universal dmg Build**: Re-added macOS target configurations to support native universal compilation on Apple Silicon and Intel hardware.
+- **OS Lifecycle Handlers**: Restored macOS-specific menu and Dock `activate` listeners.
+
+## 🚀 Release v1.2.0 Updates & Features
+
+The v1.2.0 release brings layout refinements, navigation optimizations, and features for Code Ninjas Senseis:
+
+### 🛠️ GameBuilding Session Integration
+- **Contextual Sliding Tab**: A hidden drawer (`🛠️ GameBuilding Session`) is located at the top-right of the window. Hovering your mouse in the top-right corner reveals the tab. Clicking it redirects directly to the GameBuilding session form (`https://forms.codeninjas.com/gamebuilding`).
+- **Conditional Visibility**: The tab is context-aware; it only displays on the main Ninja Hub login screen and is automatically hidden when navigating elsewhere (e.g. the student dashboard).
+
+### ⚡ Performance & Layout Refinements
+- **Isolated Viewport Triggers**: The top hover boundary is split into two regions (`width: calc(100% - 220px)` on the left for the main app navigation drawer, and `width: 220px` on the right for the GameBuilding session drawer). This prevents both drawers from triggering simultaneously and eliminates overlapping hover listeners.
+- **Hardware & External Site Compatibility**: Retained permissive permission handlers, certificate validation bypasses, and standard browser CORS flags. This ensures external educational platforms (e.g., Codio, Scratch Link, and other resources nested within Academies) and local robotics/hardware kits connect and load assets without issues.
+
+### 🐛 Bug Fixes
+- **Editor Auto-Refresh Loop Fixed**: Resolved a bug where background window/iframe requests (e.g., MakeCode Arcade simulators) were hijacked by the main window, causing the editor to auto-refresh every 10 seconds. Hijacking is now strictly restricted to Code Ninjas portal domains.
 ## 📄 License & Attribution
 
 This project was built to interface with Ninja Hub. All associated branding, logos (`mainlogo.png`), and trademarks belong to **Code Ninjas**.

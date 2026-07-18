@@ -388,10 +388,9 @@ window.addEventListener('DOMContentLoaded', () => {
   const backBtn   = mkBtn('← Back',      '#8e44ad', () => ipcRenderer.send('go-back'));
   const homeBtn   = mkBtn('🏠 Home',     '#0db88f', () => ipcRenderer.send('go-home'));
   const logoutBtn = mkBtn('⟳ Log Out',   '#187ABF', () => ipcRenderer.send('clear-cache-home'));
-  const closeBtn  = mkBtn('❌ Exit App',  '#c0392b', () => ipcRenderer.send('close-app'));
 
   if (!isOnboardingPage) {
-    toolbar.append(backBtn, homeBtn, logoutBtn, closeBtn);
+    toolbar.append(backBtn, homeBtn, logoutBtn);
     shadow.append(trigger, toolbar);
   }
 
@@ -596,17 +595,9 @@ window.addEventListener('DOMContentLoaded', () => {
       nextBtn.style.background = '#187ABF';
       nextBtn.textContent = 'Next';
 
-      const closeAppBtn = document.createElement('button');
-      closeAppBtn.className = 'modal-close-btn';
-      closeAppBtn.innerHTML = '&times;';
-      closeAppBtn.title = 'Exit App';
-      closeAppBtn.addEventListener('click', () => {
-        ipcRenderer.send('close-app');
-      });
-
       btns.append(skipBtn, backBtn, nextBtn);
       footer.append(dotsWrap, btns);
-      content.append(header, body, footer, closeAppBtn);
+      content.append(header, body, footer);
       backdrop.appendChild(content);
 
       

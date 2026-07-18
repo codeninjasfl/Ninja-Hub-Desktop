@@ -27,9 +27,15 @@ app.commandLine.appendSwitch('enable-quic');
 app.commandLine.appendSwitch('disable-features', 'ThirdPartyStoragePartitioning,PartitionedCookies');
 
 
+const WIN_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
+const MAC_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
+const LINUX_UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
+
 app.userAgentFallback = process.platform === 'win32'
-  ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
-  : 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
+  ? WIN_UA
+  : process.platform === 'darwin'
+    ? MAC_UA
+    : LINUX_UA;
 
 
 app.on('certificate-error', (event, _wc, url, error, _cert, callback) => {
@@ -255,6 +261,12 @@ function createWindow() {
 
 
 app.whenReady().then(() => {
+  const userAgent = process.platform === 'win32'
+    ? WIN_UA
+    : process.platform === 'darwin'
+      ? MAC_UA
+      : LINUX_UA;
+  session.defaultSession.setUserAgent(userAgent);
   
   session.defaultSession.setPermissionRequestHandler((_wc, _perm, callback) => {
     callback(true);
@@ -565,6 +577,8 @@ app.whenReady().then(() => {
       extension = '.exe';
     } else if (platform === 'linux') {
       extension = '.appimage';
+    } else if (platform === 'darwin') {
+      extension = '.dmg';
     }
 
     const asset = latestReleaseInfo.assets.find(a => a.name.toLowerCase().endsWith(extension));
@@ -611,4 +625,10 @@ app.on('window-all-closed', () => {
     return;
   }
   app.exit(0);
+});
+
+app.on('activate', () => {
+  if (mainWindow === null) {
+    createWindow();
+  }
 });
