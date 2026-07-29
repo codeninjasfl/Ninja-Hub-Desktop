@@ -406,14 +406,16 @@ window.addEventListener('DOMContentLoaded', () => {
                     cur.includes('signin') || cur.includes('oauth') || cur.includes('b2c');
     const onDash  = cur.includes('ninjahub.codeninjas.com/dashboard');
     const onNinjaHubLogin = cur.includes('ninjahub.codeninjas.com') && !cur.includes('/dashboard');
+    const isHome  = onDash || onNinjaHubLogin || cur === 'https://ninjahub.codeninjas.com' || cur === 'https://ninjahub.codeninjas.com/';
+    const isNinjaHubPortal = cur.includes('ninjahub.codeninjas.com') || cur.includes('codeninjas.com');
+    const isMakeCodeProject = cur.includes('makecode') || cur.includes('arcade');
 
-    homeBtn.style.display   = onLogin ? 'none' : '';
+    homeBtn.style.display   = (onLogin || isHome) ? 'none' : '';
     logoutBtn.style.display = (onLogin || onDash) ? 'none' : '';
     gameTrigger.style.display = onNinjaHubLogin ? 'block' : 'none';
     gameTab.style.display     = onNinjaHubLogin ? 'flex' : 'none';
 
-    const isRootOrLogin = onLogin || onDash || onNinjaHubLogin;
-    backBtn.style.display = isRootOrLogin ? 'none' : '';
+    backBtn.style.display = (onLogin || isHome || (isNinjaHubPortal && !isMakeCodeProject)) ? 'none' : '';
   };
 
   

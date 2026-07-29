@@ -1,6 +1,6 @@
 {
   "name": "ninja-hub-desktop",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "description": "For Code Ninjas",
   "main": "main/main.js",
   "scripts": {
