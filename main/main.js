@@ -38,6 +38,26 @@ app.userAgentFallback = process.platform === 'win32'
     : LINUX_UA;
 
 
+function forceCloseApp() {
+  console.log('[EXIT] Force closing application and cleaning up all processes...');
+  isAppQuitting = true;
+  if (reopenTimer) {
+    clearTimeout(reopenTimer);
+    reopenTimer = null;
+  }
+  BrowserWindow.getAllWindows().forEach(win => {
+    try {
+      if (!win.isDestroyed()) {
+        win.removeAllListeners('close');
+        win.removeAllListeners('closed');
+        win.destroy();
+      }
+    } catch (e) {}
+  });
+  app.exit(0);
+  process.exit(0);
+}
+
 app.on('certificate-error', (event, _wc, url, error, _cert, callback) => {
   console.log(`[CERT] Allowing certificate error (required for local robotics hardware/kits): ${url} (${error})`);
   event.preventDefault();
@@ -151,8 +171,7 @@ function registerKeyboardShortcuts(contents) {
       if (key === 'j') {
         event.preventDefault();
         console.log('[HOTKEY] Close application shortcut (Ctrl+J) triggered.');
-        isAppQuitting = true;
-        app.exit(0);
+        forceCloseApp();
       }
     }
   });
@@ -282,8 +301,7 @@ app.whenReady().then(() => {
 
   
   ipcMain.on('close-app', () => {
-    isAppQuitting = true;
-    app.exit(0);
+    forceCloseApp();
   });
 
   ipcMain.on('clear-cache-home', async () => {

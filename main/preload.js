@@ -388,9 +388,10 @@ window.addEventListener('DOMContentLoaded', () => {
   const backBtn   = mkBtn('← Back',      '#8e44ad', () => ipcRenderer.send('go-back'));
   const homeBtn   = mkBtn('🏠 Home',     '#0db88f', () => ipcRenderer.send('go-home'));
   const logoutBtn = mkBtn('⟳ Log Out',   '#187ABF', () => ipcRenderer.send('clear-cache-home'));
+  const closeBtn  = mkBtn('❌ Exit App',  '#c0392b', () => ipcRenderer.send('close-app'));
 
   if (!isOnboardingPage) {
-    toolbar.append(backBtn, homeBtn, logoutBtn);
+    toolbar.append(backBtn, homeBtn, logoutBtn, closeBtn);
     shadow.append(trigger, toolbar);
   }
 
