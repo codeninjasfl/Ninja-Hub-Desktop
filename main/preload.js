@@ -1,8 +1,24 @@
 const { ipcRenderer } = require('electron');
 
-
 if (window.top !== window.self) return;
 
+// Synchronously sync initial auth storage (sessionStorage & localStorage) if this is a duplicated tab
+ipcRenderer.invoke('get-tab-initial-storage').then(storage => {
+  if (storage) {
+    try {
+      if (storage.ssData) {
+        const ss = JSON.parse(storage.ssData);
+        Object.entries(ss).forEach(([k, v]) => sessionStorage.setItem(k, v));
+      }
+      if (storage.lsData) {
+        const ls = JSON.parse(storage.lsData);
+        Object.entries(ls).forEach(([k, v]) => localStorage.setItem(k, v));
+      }
+    } catch (e) {
+      console.error('[STORAGE-SYNC-FAIL]', e);
+    }
+  }
+}).catch(() => {});
 
 const onboardingStatusPromise = ipcRenderer.invoke('get-onboarding-status');
 
@@ -46,15 +62,16 @@ window.addEventListener('DOMContentLoaded', () => {
     }
     .overlay span { animation: pulse 1.4s ease-in-out infinite; }
     .trigger {
-      position: absolute; top: 0; left: 0; width: calc(100% - 220px); height: 32px;
-      pointer-events: auto;
+      position: fixed; top: 0; left: 50%; transform: translateX(-50%);
+      width: 240px; height: 16px;
+      pointer-events: auto; z-index: 2147483648;
     }
     .game-trigger {
-      position: absolute; top: 0; right: 0; width: 220px; height: 32px;
-      pointer-events: auto;
+      position: fixed; top: 0; right: 0; width: 120px; height: 16px;
+      pointer-events: auto; z-index: 2147483648;
     }
     .toolbar {
-      position: absolute; top: -80px; left: 50%; transform: translateX(-50%);
+      position: fixed; top: -80px; left: 50%; transform: translateX(-50%);
       background: rgba(14,41,55,0.96);
       backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
       padding: 10px 22px; border-radius: 0 0 14px 14px;
@@ -63,8 +80,10 @@ window.addEventListener('DOMContentLoaded', () => {
       box-shadow: 0 8px 28px rgba(0,0,0,0.45);
       pointer-events: auto;
       border: 1px solid rgba(255,255,255,0.08); border-top: none;
+      z-index: 2147483630;
     }
     .toolbar.visible { top: 0; }
+    .toolbar.visible.with-tab-bar { top: 32px; }
     .btn {
       border: none; color: #fff; padding: 9px 18px; border-radius: 7px;
       font-weight: 700; font-size: 13px; cursor: pointer;
@@ -85,10 +104,69 @@ window.addEventListener('DOMContentLoaded', () => {
       box-shadow: 0 8px 24px rgba(0,0,0,0.45);
       pointer-events: auto;
       border: 1px solid rgba(255,255,255,0.08); border-top: none;
-      z-index: 2147483646;
+      z-index: 2147483649;
     }
     .game-tab.visible { top: 0; }
     .game-tab:hover { background: rgba(211, 84, 0, 0.95); }
+
+    /* Chrome-style Tab Bar */
+    @keyframes tabBarSlideIn {
+      from { transform: translateY(-100%); opacity: 0; }
+      to   { transform: translateY(0);    opacity: 1; }
+    }
+    @keyframes tabPillIn {
+      from { opacity: 0; transform: translateY(-6px) scale(0.92); }
+      to   { opacity: 1; transform: translateY(0)    scale(1); }
+    }
+    .tab-bar {
+      position: fixed; top: 0; left: 0; right: 0; height: 32px;
+      background: transparent;
+      border-bottom: none;
+      display: flex; align-items: flex-start; padding: 0 12px 0; gap: 4px;
+      box-sizing: border-box; user-select: none; z-index: 2147483645;
+      pointer-events: none;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      visibility: hidden; opacity: 0;
+      transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .tab-bar.active {
+      visibility: visible; opacity: 1; pointer-events: auto;
+      animation: tabBarSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    
+    .tab-pill {
+      height: 32px; max-width: 260px; min-width: 120px; flex: 1 1 0;
+      background: rgba(30, 31, 34, 0.92); color: #949ba4;
+      border-radius: 8px 8px 0 0;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 10px 0 14px; font-size: 12px; font-weight: 500;
+      cursor: pointer; pointer-events: auto;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      box-sizing: border-box; position: relative;
+      animation: tabPillIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    .tab-pill:hover { background: #35373c; color: #dbdee1; }
+    .tab-pill.active {
+      background: #313338; color: #ffffff; font-weight: 600;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.35);
+    }
+    .tab-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; margin-right: 8px; font-size: 12px; }
+    .tab-close-btn {
+      width: 18px; height: 18px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; color: #949ba4; line-height: 1;
+      transition: all 0.15s ease; flex-shrink: 0;
+    }
+    .tab-close-btn:hover { background: rgba(255, 255, 255, 0.2); color: #ffffff; transform: scale(1.15); }
+    
+    .tab-plus-btn {
+      width: 28px; height: 28px; margin-bottom: 2px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      color: #949ba4; font-size: 18px; font-weight: 400; cursor: pointer;
+      transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1); flex-shrink: 0;
+    }
+    .tab-plus-btn:hover { background: rgba(255, 255, 255, 0.15); color: #ffffff; transform: scale(1.15) rotate(90deg); }
 
     /* Onboarding & Update Modal Backdrop */
     .modal-backdrop {
@@ -369,8 +447,21 @@ window.addEventListener('DOMContentLoaded', () => {
   toolbar.className = 'toolbar';
 
   let hideTimer;
-  const show = () => { clearTimeout(hideTimer); toolbar.classList.add('visible'); };
-  const hide = () => { hideTimer = setTimeout(() => toolbar.classList.remove('visible'), 350); };
+  const show = () => {
+    clearTimeout(hideTimer);
+    if (tabBar.classList.contains('active')) {
+      toolbar.classList.add('with-tab-bar');
+    } else {
+      toolbar.classList.remove('with-tab-bar');
+    }
+    toolbar.classList.add('visible');
+  };
+  const hide = () => {
+    hideTimer = setTimeout(() => {
+      toolbar.classList.remove('visible');
+      toolbar.classList.remove('with-tab-bar');
+    }, 250);
+  };
   trigger.addEventListener('mouseenter', show);
   toolbar.addEventListener('mouseenter', show);
   trigger.addEventListener('mouseleave', hide);
@@ -387,13 +478,109 @@ window.addEventListener('DOMContentLoaded', () => {
 
   const backBtn   = mkBtn('← Back',      '#8e44ad', () => ipcRenderer.send('go-back'));
   const homeBtn   = mkBtn('🏠 Home',     '#0db88f', () => ipcRenderer.send('go-home'));
+  const newTabBtn = mkBtn('➕ New Tab',  '#27ae60', () => ipcRenderer.send('create-new-tab'));
   const logoutBtn = mkBtn('⟳ Log Out',   '#187ABF', () => ipcRenderer.send('clear-cache-home'));
   const closeBtn  = mkBtn('❌ Exit App',  '#c0392b', () => ipcRenderer.send('close-app'));
 
+  // Chrome-style Tab Bar (hidden until 2+ tabs exist)
+  const tabBar = document.createElement('div');
+  tabBar.className = 'tab-bar';
+
   if (!isOnboardingPage) {
-    toolbar.append(backBtn, homeBtn, logoutBtn, closeBtn);
-    shadow.append(trigger, toolbar);
+    toolbar.append(backBtn, homeBtn, newTabBtn, logoutBtn, closeBtn);
+    shadow.append(trigger, toolbar, tabBar);
   }
+
+  // Handle Chrome-like multi-tab rendering & document layout translation
+  let currentTabIds = '';
+  ipcRenderer.on('tabs-updated', (_event, data) => {
+    const { tabs, activeId, count } = data;
+
+    // If only 1 tab exists, hide the tab bar completely and reset document translation
+    if (!count || count <= 1) {
+      tabBar.style.display = 'none';
+      tabBar.classList.remove('active');
+      if (document.body) {
+        document.body.style.transition = 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)';
+        document.body.style.transform = 'none';
+        document.body.style.height = '';
+        document.body.style.boxSizing = '';
+      }
+      currentTabIds = '';
+      return;
+    }
+
+    // Show tab bar — translate only <body>, NOT <html>.
+    // The shadow host is a direct child of <html> so position:fixed on the tab bar
+    // stays relative to the real viewport and doesn't shift down with the page.
+    tabBar.style.display = 'flex';
+    tabBar.classList.add('active');
+    if (document.body) {
+      document.body.style.transition = 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)';
+      document.body.style.transform = 'translateY(32px)';
+      document.body.style.height = 'calc(100vh - 32px)';
+      document.body.style.boxSizing = 'border-box';
+    }
+
+    const newTabIds = tabs.map(t => t.id).join(',');
+
+    // Re-render tab pills only if the set of tab IDs changed (prevents re-triggering entrance animations on click)
+    if (newTabIds !== currentTabIds) {
+      currentTabIds = newTabIds;
+      tabBar.innerHTML = '';
+
+      tabs.forEach(t => {
+        const pill = document.createElement('div');
+        pill.dataset.tabId = String(t.id);
+        pill.className = 'tab-pill' + (t.id === activeId ? ' active' : '');
+
+        const titleSpan = document.createElement('span');
+        titleSpan.className = 'tab-title';
+        titleSpan.textContent = t.title || 'Tab';
+
+        const closeSpan = document.createElement('span');
+        closeSpan.className = 'tab-close-btn';
+        closeSpan.innerHTML = '&times;';
+        closeSpan.title = 'Close tab';
+        closeSpan.addEventListener('click', (e) => {
+          e.stopPropagation();
+          ipcRenderer.send('close-tab', t.id);
+        });
+
+        pill.append(titleSpan, closeSpan);
+        pill.addEventListener('click', () => {
+          ipcRenderer.send('switch-tab', t.id);
+        });
+
+        tabBar.appendChild(pill);
+      });
+
+      const plusBtn = document.createElement('div');
+      plusBtn.className = 'tab-plus-btn';
+      plusBtn.textContent = '+';
+      plusBtn.title = 'New tab';
+      plusBtn.addEventListener('click', () => {
+        ipcRenderer.send('create-new-tab');
+      });
+      tabBar.appendChild(plusBtn);
+    } else {
+      // Just toggle active class on existing DOM pills without re-triggering entrance animations!
+      const pills = tabBar.querySelectorAll('.tab-pill');
+      pills.forEach(pill => {
+        const id = parseInt(pill.dataset.tabId, 10);
+        if (id === activeId) {
+          pill.classList.add('active');
+        } else {
+          pill.classList.remove('active');
+        }
+        const tabData = tabs.find(t => t.id === id);
+        if (tabData) {
+          const titleSpan = pill.querySelector('.tab-title');
+          if (titleSpan && tabData.title) titleSpan.textContent = tabData.title;
+        }
+      });
+    }
+  });
 
   
   let lastUrl = '';
@@ -412,10 +599,20 @@ window.addEventListener('DOMContentLoaded', () => {
 
     homeBtn.style.display   = (onLogin || isHome) ? 'none' : '';
     logoutBtn.style.display = (onLogin || onDash) ? 'none' : '';
-    gameTrigger.style.display = onNinjaHubLogin ? 'block' : 'none';
-    gameTab.style.display     = onNinjaHubLogin ? 'flex' : 'none';
+    
+    // Hide gameTab/gameTrigger when tabs are active to prevent overlapping tab pills
+    const isTabBarActive = tabBar.classList.contains('active');
+    gameTrigger.style.display = (onNinjaHubLogin && !isTabBarActive) ? 'block' : 'none';
+    gameTab.style.display     = (onNinjaHubLogin && !isTabBarActive) ? 'flex' : 'none';
 
     backBtn.style.display = (onLogin || isHome || (isNinjaHubPortal && !isMakeCodeProject)) ? 'none' : '';
+
+    // New Tab button ONLY shows when logged into Impact or Academies
+    const isImpact = cur.includes('impact.codeninjas.com') || cur.includes('impact');
+    const isAcademy = cur.includes('academies.codeninjas.com') || cur.includes('academy.codeninjas.com') || cur.includes('academies');
+    const isLoggedInSite = (isImpact || isAcademy) && !onLogin;
+
+    newTabBtn.style.display = isLoggedInSite ? '' : 'none';
   };
 
   
@@ -815,9 +1012,8 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  if (!isBootPage) {
-    startModals();
-  }
+  // Enable update alerts before login on all pages
+  startModals();
 
   updateButtons();
   setInterval(updateButtons, 600);
