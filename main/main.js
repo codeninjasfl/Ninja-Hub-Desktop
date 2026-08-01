@@ -58,6 +58,98 @@ function forceCloseApp() {
   process.exit(0);
 }
 
+function updateAllTabBars() {
+  const windows = BrowserWindow.getAllWindows().filter(w => !w.isDestroyed());
+  if (windows.length === 0) return;
+
+  const tabState = windows.map((w, idx) => ({
+    id: w.id,
+    title: w.webContents.getTitle() || `Tab ${idx + 1}`,
+    url: w.webContents.getURL(),
+    isMain: w === mainWindow
+  }));
+
+  // The "active" tab is whichever window is currently visible/focused
+  const focused = BrowserWindow.getFocusedWindow();
+  const visible = windows.find(w => w.isVisible() && w.isFocused())
+               || windows.find(w => w.isVisible())
+               || windows[windows.length - 1];
+  const activeId = (focused && !focused.isDestroyed()) ? focused.id : visible.id;
+
+  windows.forEach(w => {
+    if (!w.isDestroyed()) {
+      w.webContents.send('tabs-updated', {
+        tabs: tabState,
+        activeId,
+        count: windows.length
+      });
+    }
+  });
+}
+
+const pendingStorageForWindow = new Map();
+
+function createTabWindow(targetUrl, initialStorage = null) {
+  console.log(`[TAB] Creating new tab window for: ${targetUrl}`);
+  const tabWin = new BrowserWindow({
+    show: false,
+    fullscreen: true,
+    alwaysOnTop: true,
+    kiosk: true,
+    icon: iconPath,
+    backgroundColor: '#1a1b1e',
+    webPreferences: {
+      session: session.defaultSession,
+      contextIsolation: true,
+      nodeIntegration: false,
+      preload: path.join(__dirname, 'preload.js'),
+      webSecurity: false,
+      allowRunningInsecureContent: true,
+      backgroundThrottling: false,
+      spellcheck: false
+    }
+  });
+
+  if (initialStorage) {
+    pendingStorageForWindow.set(tabWin.id, initialStorage);
+  }
+
+  registerKeyboardShortcuts(tabWin.webContents);
+  tabWin.webContents.setWindowOpenHandler(handleWindowOpen);
+
+  tabWin.loadURL(targetUrl || HOME_URL);
+
+  tabWin.once('ready-to-show', () => {
+    BrowserWindow.getAllWindows().forEach(w => {
+      if (w.id !== tabWin.id && !w.isDestroyed()) {
+        w.setAlwaysOnTop(false);
+        w.hide();
+      }
+    });
+    tabWin.setAlwaysOnTop(true);
+    tabWin.show();
+    tabWin.focus();
+    updateAllTabBars();
+  });
+
+  tabWin.webContents.on('page-title-updated', () => updateAllTabBars());
+  tabWin.on('closed', () => {
+    pendingStorageForWindow.delete(tabWin.id);
+    setTimeout(() => {
+      const remaining = BrowserWindow.getAllWindows().filter(w => !w.isDestroyed());
+      if (remaining.length > 0) {
+        const toShow = remaining[remaining.length - 1];
+        toShow.setAlwaysOnTop(true);
+        toShow.show();
+        toShow.focus();
+      }
+      updateAllTabBars();
+    }, 100);
+  });
+
+  return tabWin;
+}
+
 app.on('certificate-error', (event, _wc, url, error, _cert, callback) => {
   console.log(`[CERT] Allowing certificate error (required for local robotics hardware/kits): ${url} (${error})`);
   event.preventDefault();
@@ -71,7 +163,7 @@ app.on('certificate-error', (event, _wc, url, error, _cert, callback) => {
 function handleWindowOpen(details) {
   const url = (details.url || '').toLowerCase();
 
-  
+  // Allow SSO Auth popups (Azure AD B2C / Microsoft)
   const isSSOPopup =
     url.includes('login.microsoftonline.com') ||
     url.includes('login.live.com') ||
@@ -88,7 +180,7 @@ function handleWindowOpen(details) {
         kiosk: true,
         alwaysOnTop: true,
         show: true,
-        backgroundColor: '#000000',
+        backgroundColor: '#1a1b1e',
         icon: iconPath,
         webPreferences: {
           contextIsolation: true,
@@ -101,21 +193,14 @@ function handleWindowOpen(details) {
     };
   }
 
-  
-  
-  
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    const currentUrl = mainWindow.webContents.getURL().toLowerCase();
-    const isCurrentPagePortal = currentUrl.includes('codeninjas.com');
-    const isSafeUrl = !url.includes('about:blank') && !url.startsWith('blob:') && !url.startsWith('data:');
-
-    if (isCurrentPagePortal && isSafeUrl) {
-      console.log(`[NAV-HIJACK] Hijacking window.open link to load in-place: ${details.url}`);
-      mainWindow.loadURL(details.url);
-    } else {
-      console.log(`[NAV-IGNORE] Ignoring window.open link to prevent refresh loop: ${details.url}`);
-    }
+  // Open external links (from Academies, Impact, or external sites) in a new tab window!
+  const isSafeUrl = !url.includes('about:blank') && !url.startsWith('blob:') && !url.startsWith('data:');
+  if (isSafeUrl) {
+    console.log(`[NAV-TAB] Opening link in new tab: ${details.url}`);
+    createTabWindow(details.url);
+    return { action: 'deny' };
   }
+
   return { action: 'deny' };
 }
 
@@ -167,8 +252,8 @@ function registerKeyboardShortcuts(contents) {
         }
       }
 
-      
-      if (key === 'j') {
+      // Close app on Ctrl+J (or Cmd+J) - ONLY when Shift is NOT pressed, so Ctrl+Shift+J (DevTools) is unaffected!
+      if (key === 'j' && !input.shift && !input.alt) {
         event.preventDefault();
         console.log('[HOTKEY] Close application shortcut (Ctrl+J) triggered.');
         forceCloseApp();
@@ -209,7 +294,7 @@ function createWindow() {
     alwaysOnTop: true,
     kiosk: true,
     icon: iconPath,
-    backgroundColor: '#000000',
+    backgroundColor: '#1a1b1e',
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -247,7 +332,7 @@ function createWindow() {
       }
     }, 150);
   });
-  mainWindow.on('hide', () => mainWindow.show());
+  // Note: hide listener removed to allow seamless multi-window tab switching
 
   
   mainWindow.on('close', (event) => {
@@ -321,6 +406,89 @@ app.whenReady().then(() => {
     } else if (senderWin) {
       senderWin.close();
     }
+  });
+
+  // Multi-tab Management IPC Handlers
+  ipcMain.handle('get-tab-initial-storage', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    return win ? pendingStorageForWindow.get(win.id) : null;
+  });
+
+  ipcMain.on('create-new-tab', async (event, customUrl) => {
+    const senderWin = BrowserWindow.fromWebContents(event.sender);
+    const curUrl = senderWin ? senderWin.webContents.getURL() : '';
+    const isImpact = curUrl.toLowerCase().includes('impact.codeninjas.com');
+    const isAcademy = curUrl.toLowerCase().includes('academies.codeninjas.com') || curUrl.toLowerCase().includes('academy.codeninjas.com');
+
+    let targetUrl = customUrl || HOME_URL;
+    if (!customUrl) {
+      if (isImpact) {
+        targetUrl = 'https://impact.codeninjas.com/home/dashboard';
+      } else if (isAcademy) {
+        targetUrl = curUrl || 'https://academies.codeninjas.com';
+      }
+    }
+
+    let initialStorage = null;
+    if ((isImpact || isAcademy) && senderWin) {
+      try {
+        const [ssData, lsData] = await Promise.all([
+          senderWin.webContents.executeJavaScript('JSON.stringify(Object.fromEntries(Object.entries(sessionStorage)))').catch(() => '{}'),
+          senderWin.webContents.executeJavaScript('JSON.stringify(Object.fromEntries(Object.entries(localStorage)))').catch(() => '{}')
+        ]);
+        initialStorage = { ssData, lsData };
+      } catch (e) {
+        console.error('[STORAGE-SYNC] Failed to extract source window storage:', e);
+      }
+    }
+
+    createTabWindow(targetUrl, initialStorage);
+  });
+
+  ipcMain.on('switch-tab', (_event, windowId) => {
+    const targetWin = BrowserWindow.fromId(windowId);
+    if (!targetWin || targetWin.isDestroyed()) return;
+
+    BrowserWindow.getAllWindows().forEach(w => {
+      if (!w.isDestroyed()) {
+        if (w.id === targetWin.id) {
+          w.setAlwaysOnTop(true);
+          w.show();
+          w.focus();
+        } else {
+          w.setAlwaysOnTop(false);
+          w.hide();
+        }
+      }
+    });
+    updateAllTabBars();
+  });
+
+  ipcMain.on('close-tab', (_event, windowId) => {
+    const targetWin = BrowserWindow.fromId(windowId);
+    if (!targetWin || targetWin.isDestroyed()) return;
+
+    const windows = BrowserWindow.getAllWindows().filter(w => !w.isDestroyed());
+
+    // Do not close if only 1 window exists total
+    if (windows.length <= 1) return;
+
+    if (targetWin === mainWindow) {
+      // If closing mainWindow, transfer URL to mainWindow from secondary tab to prevent app restart
+      const otherWin = windows.find(w => w !== mainWindow);
+      if (otherWin) {
+        const nextUrl = otherWin.webContents.getURL();
+        otherWin.destroy();
+        mainWindow.loadURL(nextUrl);
+        mainWindow.setAlwaysOnTop(true);
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    } else {
+      targetWin.close();
+    }
+
+    setTimeout(updateAllTabBars, 50);
   });
 
   
@@ -520,7 +688,25 @@ app.whenReady().then(() => {
     }).on('error', onError);
   }
 
+  function killOtherInstances() {
+    const { execSync } = require('child_process');
+    const myPid = process.pid;
+    console.log(`[UPDATE] Force terminating any conflicting Ninja Hub Desktop instances (my PID: ${myPid})...`);
+    try {
+      if (process.platform === 'win32') {
+        execSync(`taskkill /F /FI "PID ne ${myPid}" /IM "Ninja Hub Desktop.exe" /IM "ninja-hub-desktop.exe" 2>NUL`, { stdio: 'ignore' });
+      } else if (process.platform === 'linux') {
+        execSync(`pkill -f -o ninja-hub-desktop 2>/dev/null`, { stdio: 'ignore' });
+      } else if (process.platform === 'darwin') {
+        execSync(`pkill -f -o "Ninja Hub Desktop" 2>/dev/null`, { stdio: 'ignore' });
+      }
+    } catch (e) {
+      // Ignore if no other processes found
+    }
+  }
+
   function installUpdate(installerPath) {
+    killOtherInstances();
     const { spawn } = require('child_process');
     const platform = process.platform;
     console.log(`[UPDATE] Running installer: ${installerPath}`);
@@ -531,8 +717,7 @@ app.whenReady().then(() => {
         stdio: 'ignore'
       });
       child.unref();
-      isAppQuitting = true;
-      app.exit(0);
+      forceCloseApp();
     } else if (platform === 'linux') {
       const fs = require('fs');
       try {
@@ -542,16 +727,14 @@ app.whenReady().then(() => {
           stdio: 'ignore'
         });
         child.unref();
-        isAppQuitting = true;
-        app.exit(0);
+        forceCloseApp();
       } catch (err) {
         console.error('[UPDATE] Failed to run AppImage:', err);
       }
     } else {
       const { shell } = require('electron');
       shell.openPath(installerPath).then(() => {
-        isAppQuitting = true;
-        app.exit(0);
+        forceCloseApp();
       });
     }
   }
@@ -635,6 +818,11 @@ app.whenReady().then(() => {
   });
 
   createWindow();
+
+  // Trigger update check on startup before user login
+  setTimeout(() => {
+    checkForUpdates();
+  }, 2000);
 
 });
 

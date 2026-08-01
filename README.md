@@ -60,6 +60,22 @@ npm run build:mac      # Compile macOS DMG (Universal x64/arm64)
 npm run build
 ```
 
+## 🚀 Release v2.1.0 Updates & Features
+
+The v2.1.0 release brings discrete multi-tab support for Academies and Impact, session persistence, automatic process cleanup for updates, and developer debugging tools:
+
+### 🗂️ Discrete Multi-Tab Management (Academies & Impact)
+- **Discrete Chrome Tabs**: Clean, dark-themed tabs for managing multiple activities and past projects simultaneously.
+- **Seamless Viewport Aspect Ratio Shift**: Translates the page layout down by 32px when tabs are active, keeping all web page controls and headers fully accessible without scaling distortion or black borders.
+- **Automatic 1-Tab Lockdown**: The tab bar automatically hides completely (`display: none`) when only a single tab is open, giving students 100% of the screen.
+- **Session & Auth Duplication**: Opening a new tab on Impact or Academies automatically clones `sessionStorage` and `localStorage` tokens, maintaining active Azure B2C login states across tabs without re-logging in.
+- **External Activity Tab Opening**: External activity links (MakeCode, Scratch, Codio, etc.) automatically open as separate tab windows.
+- **Zero-Refresh Tab Closing**: Closing a tab seamlessly closes the window and updates remaining tabs without reloading the app or restarting `mainWindow`.
+
+### 🔄 Pre-Login Autoupdate & Process Cleanup
+- **Early Update Alerts**: Update checks run prior to user authentication.
+- **Conflicting Process Termination**: Automatically terminates competing background instances during updates to ensure 100% update completion.
+
 ## 🚀 Release v2.0.0 & v2.0.1 Updates & Features
 
 The v2.0 releases bring major platform updates, startup flow optimizations, and extended platform compatibility:
